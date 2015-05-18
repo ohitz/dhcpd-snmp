@@ -1,0 +1,14 @@
+# Configuration file for dhcpd-snmp
+
+# Path to the dhcpd.leases file.
+#
+# leases: /var/lib/dhcp3/dhcpd.leases
+
+leases: /var/lib/dhcp3/dhcpd.leases
+
+# Definition of the pools
+#
+# pool: number, description, from-to, from-to, from-to...
+
+pool: 1, "Division A", 192.168.0.2-192.168.0.254
+pool: 2, "Division B", 192.168.1.2-192.168.1.254, 192.168.2.2-192.168.2.254

@@ -1,0 +1,584 @@
+#! /usr/bin/perl
+# --------------------------------------------------------------------
+# Copyright (C) 2006-2015 Oliver Hitz <oliver@net-track.ch>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful, but
+# WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+# General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place - Suite 330, Boston,
+# MA 02111-1307, USA.
+# --------------------------------------------------------------------
+# dhcpd-snmp
+#
+# An extension for polling the active and available lease counts of a
+# running dhcpd.
+# --------------------------------------------------------------------
+
+use threads;
+use threads::shared;
+use Time::Local;
+use Getopt::Long;
+use strict;
+
+# The base OID of this extension. Has to match the OID in snmpd.conf:
+my $baseoid = ".1.3.6.1.4.1.21695.1.2";
+
+# Results are cached so an SNMP walk doesn't result in parsing the
+# dhcpd.leases file multiple times.
+my $cache_secs = 50;
+
+# --------------------------------------------------------------------
+
+# Load configuration file
+my $conf = {
+  leases => undef,
+  pools => { }
+};
+
+my $test_on;
+
+if (!GetOptions("test" => \$test_on)) {
+  usage();
+}
+
+if ($#ARGV != 0) {
+  usage();
+}
+
+read_configuration($ARGV[0]);
+
+# Create MIB and index
+my %MIB;
+my @MIB_INDEX;
+my %MIB_VALUES;
+
+share(%MIB_VALUES);
+
+create_dhcp_mib();
+
+if ($test_on) {
+  read_leases();
+
+  # Clear leases
+  foreach my $i (keys %{ $conf->{pools} }) {
+    my $act_perc = 0;
+    my $exp_perc = 0;
+    if ($conf->{pools}->{$i}->{total} != 0) {
+      $act_perc = 100 * $conf->{pools}->{$i}->{active} / $conf->{pools}->{$i}->{total};
+      $exp_perc = 100 * $conf->{pools}->{$i}->{expired} / $conf->{pools}->{$i}->{total};
+    }
+    
+    printf "Pool %d: %5d total, %5d active (%3d%%), %5d expired (%3d%%) (%s)\n",
+    $i,
+    $conf->{pools}->{$i}->{total},
+    $conf->{pools}->{$i}->{active},
+    $act_perc,
+    $conf->{pools}->{$i}->{expired},
+    $exp_perc,
+    $conf->{pools}->{$i}->{name};
+  }
+
+  exit 0;
+}
+
+# Switch on autoflush
+$| = 1;
+
+# Create worker thread
+threads->create("worker_thread");
+
+# Main loop
+while (my $cmd = <STDIN>) {
+  chomp $cmd;
+
+  if ($cmd eq "PING") {
+    print "PONG\n";
+  } elsif ($cmd eq "get") {
+    my $oid_in = <STDIN>;
+
+    my $oid = get_oid($oid_in);
+
+    if ($oid != 0 && defined($MIB{$oid})) {
+      print "$baseoid.$oid\n";
+      print $MIB{$oid}[0]."\n";
+      if (exists $MIB_VALUES{$oid}) {
+	print $MIB_VALUES{$oid}."\n";
+      } else {
+	print $MIB{$oid}[1]."\n";
+      }
+    } else {
+      print "NONE\n";
+    }
+  } elsif ($cmd eq "getnext") {
+    my $oid_in = <STDIN>;
+
+    my $oid = get_oid($oid_in);
+    my $found = 0;
+    my $found_index;
+
+    if ($oid != 0 && defined($MIB{$oid})) {
+      $found_index = $MIB{$oid}[2];
+      $found_index++;
+      if (defined $MIB_INDEX[$found_index]) {
+	$found = 1;
+      }
+    } else {
+      # Find the first OID that appears after the desired one. Slow!
+      for (my $i = 0; $i < @MIB_INDEX; $i++) {
+	if (oidcmp($oid, $MIB_INDEX[$i]) == -1) {
+	  $found_index = $i;
+	  $found = 1;
+	  last;
+	}
+      }
+    }
+
+    if ($found) {
+      print "$baseoid.".$MIB_INDEX[$found_index]."\n";
+      print $MIB{$MIB_INDEX[$found_index]}[0]."\n";
+      if (exists $MIB_VALUES{$MIB_INDEX[$found_index]}) {
+	print $MIB_VALUES{$MIB_INDEX[$found_index]}."\n";
+      } else {
+	print $MIB{$MIB_INDEX[$found_index]}[1]."\n";
+      }
+    } else {
+     print "NONE\n";
+    }
+  } else {
+    # Unknown command
+  }
+}
+
+exit 0;
+
+sub usage()
+{
+  print STDERR "Usage: $0 --test dhcpd-snmp.conf\n";
+  exit 1;
+}
+
+sub get_oid
+{
+
+  my ($oid) = @_;
+  chomp $oid;
+
+  my $base = $baseoid;
+  $base =~ s/\./\\./g;
+
+  if ($oid !~ /^$base(\.|$)/) {
+    # Requested oid doesn't match base oid
+    return 0;
+  }
+
+  $oid =~ s/^$base\.?//;
+  return $oid;
+}
+
+sub oidcmp {
+  my ($x, $y) = @_;
+
+  my @a = split /\./, $x;
+  my @b = split /\./, $y;
+
+  my $i = 0;
+
+  while (1) {
+
+    if ($i > $#a) {
+      if ($i > $#b) {
+	return 0;
+      } else {
+	return -1;
+      }
+    } elsif ($i > $#b) {
+      return 1;
+    }
+
+    if ($a[$i] < $b[$i]) {
+      return -1;
+    } elsif ($a[$i] > $b[$i]) {
+      return 1;
+    }
+
+    $i++;
+  }
+}
+
+sub create_dhcp_mib
+{
+  %MIB = (
+    "1" => [ "integer", 0 ],	# Number of pools
+  );
+
+  foreach my $i (keys %{ $conf->{pools} }) {
+    $MIB{"1"}[1]++;
+
+    my $pool = $conf->{pools}->{$i};
+    
+    $MIB{"2.1.".$i} = [ "integer", $i, 0 ];
+    $MIB{"2.2.".$i} = [ "string", $pool->{name}, 0 ];
+    $MIB{"2.3.".$i} = [ "integer", $pool->{total}, 0 ];
+    $MIB{"2.4.".$i} = [ "integer", 0, 0 ];
+    $MIB{"2.5.".$i} = [ "integer", 0, 0 ];
+    $MIB{"2.6.".$i} = [ "integer", 0, 0 ];
+
+    $MIB_VALUES{"2.4.$i"} = 0;
+    $MIB_VALUES{"2.5.$i"} = 0;
+    $MIB_VALUES{"2.6.$i"} = 0;
+  }
+
+  @MIB_INDEX = sort { oidcmp($a, $b) } keys %MIB;
+
+  # Add index to the mib.
+  for (my $i = 0; $i < @MIB_INDEX; $i++) {
+    $MIB{$MIB_INDEX[$i]}[2] = $i;
+  }
+}
+
+sub ip2int {
+  my ($ip) = @_;
+  return unpack "N", pack "CCCC", split /\./, $ip;
+}
+
+sub ipsearch
+{
+  my ($ranges, $ip) = @_;
+  my $l = 0;
+  my $u = @$ranges - 1;
+  while ($l <= $u) {
+    my $i = int(($l + $u)/2);
+
+    if ($ip > $ranges->[$i]->{"to"}) {
+      $l = $i + 1;
+    } elsif ($ip < $ranges->[$i]->{"from"}) {
+      $u = $i - 1;
+    } else {
+      return $ranges->[$i]->{"pool"};
+    }
+  }
+  return -1;
+}
+
+sub read_leases
+{
+  # Clear leases
+  foreach my $i (keys %{ $conf->{pools} }) {
+    $conf->{pools}->{$i}->{leases} = ();
+    $conf->{pools}->{$i}->{active} = 0;
+    $conf->{pools}->{$i}->{expired} = 0;
+  }
+
+  # Read leases
+  if (!open(LEASES, $conf->{leases})) {
+    printf STDERR "ERROR: Unable to open leases file '%s'!\n", $conf->{leases};
+    return;
+  }
+
+  # Construct the range->pool index (from-to => pool)
+  my @ranges;
+  foreach my $i (keys %{ $conf->{pools} }) {
+    my $pool = $conf->{pools}->{$i};
+    foreach my $r (@{ $pool->{ranges} }) {
+      push @ranges, { "from" => $r->{from},
+		      "to" => $r->{to},
+		      "pool" => $i };
+    }
+  }
+
+  # Sort the index so we can search it using a binary search
+  @ranges = sort { $a->{from} <=> $b->{from} } @ranges;
+
+  # Current lease
+  my $l = undef;
+
+  while (my $line = <LEASES>) {
+    if ($line =~ /^lease (\d+\.\d+\.\d+\.\d+) \{$/) {
+      my $ip = ip2int($1);
+      $l = undef;
+
+      my $i = ipsearch(\@ranges, $ip);
+      if ($i != -1) {
+	$l->{pool} = $i;
+        $l->{ip} = $ip;
+      }
+    } elsif ($line =~ /^\s+ends \d (\d+)\/(\d+)\/(\d+) (\d+):(\d+):(\d+);$/) {
+      if ($l) {
+	$l->{ends} = timegm($6, $5, $4, $3, $2-1, $1);
+      }
+    } elsif ($line =~ /^\s+ends never;$/) {
+      if ($l) {
+	$l->{ends} = -1;
+      }
+    } elsif ($line =~ /^\}$/) {
+      if ($l) {
+	$conf->{pools}->{$l->{pool}}->{leases}->{$l->{ip}} = $l->{ends};
+      }
+    }
+  }
+
+  close(LEASES);
+
+  # Count active and expired leases
+  my $now = time();
+
+  foreach my $i (keys %{ $conf->{pools} }) {
+    my $pool = $conf->{pools}->{$i};
+
+    foreach my $ip (keys %{ $pool->{leases} }) {
+      my $end = $pool->{leases}->{$ip};
+      if (($end == -1) || ($end >= $now)) {
+	$pool->{active}++;
+      } else {
+	$pool->{expired}++;
+      }
+    }
+  }
+}
+
+sub read_configuration
+{
+  my ($f) = @_;
+
+  if (!open C, "$f") {
+    printf STDERR "ERROR: Unable to open configuration file '%s'!\n", $f;
+    exit 1;
+  }
+  while (my $l = <C>) {
+    $l =~ s/#.*//;
+    $l =~ s/^\s*//;
+    $l =~ s/\s*$//;
+    
+    if ($l eq "") {
+      next;
+    }
+
+    if ($l =~ /^leases:\s*(\S+)$/) {
+      $conf->{leases} = $1;
+
+      # Check if the leases file is readable
+      if (! -r $conf->{leases}) {
+        printf STDERR "ERROR: Leases file '%s' does not exist or is not readable!\n", $conf->{leases};
+        exit 1;
+      }
+    } elsif ($l =~ /^pool:\s*(\d+)\s*,\s*("[^"]*"|[^"][^,]*)\s*,\s*(.*)$/) {
+
+      # Read the pool definition
+      my $p = { index => $1,
+        	name => $2,
+        	ranges => [ ],
+                total => 0,
+        	leases => { }};
+
+      my @ranges = split /\s*,\s*/, $3;
+
+      $p->{name} =~ s/^\"//;
+      $p->{name} =~ s/\"$//;
+
+      foreach my $r (@ranges) {
+        if ($r !~ /^(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})-(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/) {
+          printf STDERR "ERROR: Invalid range definition '%s'.\n", $r;
+          next;
+        }
+
+        my ($from, $to) = ($1, $2);
+
+        my $fromip = ip2int($from);
+        my $toip = ip2int($to);
+
+        if ($toip < $fromip) {
+          my $t = $toip;
+          $toip = $fromip;
+          $fromip = $t;
+        }
+
+        # Check for overlaps.
+        my $overlap_found = 0;
+
+        foreach my $r2 (@{ $p->{ranges} }) {
+          if (!($fromip > $r2->{to}) && !($toip < $r2->{from})) {
+            $overlap_found = 1;
+            last;
+          }
+        }
+
+        if ($overlap_found) {
+          printf STDERR "WARN: Range %s-%s overlaps with other range, ignoring it.\n", $from, $to;
+        } else {
+          $p->{total} += $toip - $fromip + 1;
+	  
+          push @{ $p->{ranges} }, { "from" => $fromip,
+                                    "to" => $toip };
+        }
+      }
+
+      $conf->{pools}{$p->{index}} = $p;
+    } else {
+
+      printf STDERR "ERROR: Invalid line '%s'.\n", $l;
+      exit 1;
+
+    }
+  }
+
+  close(C);
+}
+
+sub worker_thread
+{
+  while (1) {
+    read_leases();
+
+    foreach my $i (keys %{ $conf->{pools} }) {
+      my $pool = $conf->{pools}->{$i};
+      
+      $MIB_VALUES{"2.4.$i"} = $pool->{active};
+      $MIB_VALUES{"2.5.$i"} = $pool->{expired};
+      $MIB_VALUES{"2.6.$i"} = $pool->{total} - $pool->{active};
+    }
+   
+    sleep($cache_secs);
+  }
+}
+
+__END__
+
+=head1 NAME
+
+dhcpd-snmp
+
+=head1 SYNOPSIS
+
+  $ dhcpd-snmp [--test] dhcpd-snmp.conf
+
+=head1 DESCRIPTION
+
+B<dhcpd-snmp> is an extension for the Net-SNMP agent and the ISC DHCP
+server. It allows you to monitor and track the address usage of your
+dynamic IP address pools through SNMP.
+
+=head1 CONFIGURATION FILE
+
+The configuration file defines the location of the F<dhcpd.leases>
+file as well as the pools of which you want to access the lease
+counts.
+
+The file is in B<key: value> format and allows only two keys:
+
+=over 8
+
+=item B<leases>: C</var/lib/dhcp3/dhcpd.leases>
+
+Location of the F<dhcpd.leases> file. This file needs to be accessible
+by the script.
+
+=item B<pool>: C<index>, C<description>, C<ip1-ip2, ip3-ip4...>
+
+Defines a pool to monitor. C<index> is a unique numeric index,
+C<description> a textual description of this pool, and C<ip1-ip2,
+ip3-ip4, ...> defines the ranges of IP addresses belonging to this
+pool.
+
+=back
+
+Since this extension is a persistent script, changes to the
+configuration file require a restart of snmpd.
+
+=head1 INSTALLATION
+
+After installing the B<dhcpd-snmp> script and adapting the
+configuration file, test if the configuration is valid:
+
+  $ path/to/dhcpd-snmp --test path/to/dhcpd-snmp.conf
+
+This will print per-pool stats.
+
+If this works, it can be installed in Net-SNMP. To install it, the
+following line needs to be inserted in the F<snmpd.conf> file:
+
+  pass_persist .1.3.6.1.4.1.21695.1.2 path/to/dhcpd-snmp path/to/dhcpd-snmp.conf
+
+Net-SNMP will need to be restarted after this change.
+
+You should now be able to get the statistics using F<snmpwalk>, for example:
+
+  $ snmpwalk host community .1.3.6.1.4.1.21695.1.2
+
+This should give you a list of the statistics of your DHCP server.
+
+= head2 RUNNING THE SCRIPT INTERACTIVELY
+
+B<dhcpd-snmp> is a simple script which is run by Net-SNMP and which is
+controlled using stdin/stdout. If you run it interactively, you can
+control it as follows:
+
+  PING
+
+The script should return "PONG".
+
+  get
+  .1.3.6.1.4.1.21695.1.2.1
+
+The script should return three lines: the OID, "integer", and the
+number of configured pools.
+
+  get
+  .1.3.6.1.4.1.21695.1.2.2.2.1
+
+OID, "string", and the name of your first address pool.
+
+  get
+  .1.3.6.1.4.1.21695.1.2.2.4.1
+
+OID, "integer", and the number of active leases.
+
+Quit the dialog using CTRL-D.
+
+=head1 MIB
+
+The script returns the following variables:
+
+  .1.3.6.1.4.1.21695.1.2.1: number of configured pools
+  .1.3.6.1.4.1.21695.1.2.2.<pool>: pool description
+  .1.3.6.1.4.1.21695.1.2.3.<pool>: size of the pool (number of addresses)
+  .1.3.6.1.4.1.21695.1.2.4.<pool>: active leases
+  .1.3.6.1.4.1.21695.1.2.5.<pool>: expired leases
+  .1.3.6.1.4.1.21695.1.2.6.<pool>: available addresses (size - active leases)
+
+For a complete MIB file see the C<mibs> directory in the source archive.
+
+=head1 SECURITY
+
+It is assumed that users of this script know how to properly secure
+their snmpd. Please read the corresponding man pages on more
+information about this.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2006-2015 Oliver Hitz
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+USA.
+
+=cut
