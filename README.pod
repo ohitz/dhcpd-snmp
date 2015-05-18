@@ -1,113 +1,129 @@
-[1mNAME[0m
-    dhcpd-snmp
+=head1 NAME
 
-[1mSYNOPSIS[0m
-      $ dhcpd-snmp [--test] dhcpd-snmp.conf
+dhcpd-snmp
 
-[1mDESCRIPTION[0m
-    [1mdhcpd-snmp[0m is an extension for the Net-SNMP agent and the ISC DHCP server.
-    It allows you to monitor and track the address usage of your dynamic IP
-    address pools through SNMP.
+=head1 SYNOPSIS
 
-[1mCONFIGURATION FILE[0m
-    The configuration file defines the location of the dhcpd.leases file as
-    well as the pools of which you want to access the lease counts.
+  $ dhcpd-snmp [--test] dhcpd-snmp.conf
 
-    The file is in [1mkey: value[0m format and allows only two keys:
+=head1 DESCRIPTION
 
-    [1mleases[0m: "/var/lib/dhcp3/dhcpd.leases"
-            Location of the dhcpd.leases file. This file needs to be
-            accessible by the script.
+B<dhcpd-snmp> is an extension for the Net-SNMP agent and the ISC DHCP
+server. It allows you to monitor and track the address usage of your
+dynamic IP address pools through SNMP.
 
-    [1mpool[0m: "index", "description", "ip1-ip2, ip3-ip4..."
-            Defines a pool to monitor. "index" is a unique numeric index,
-            "description" a textual description of this pool, and "ip1-ip2,
-            ip3-ip4, ..." defines the ranges of IP addresses belonging to this
-            pool.
+=head1 CONFIGURATION FILE
 
-    Since this extension is a persistent script, changes to the configuration
-    file require a restart of snmpd.
+The configuration file defines the location of the F<dhcpd.leases>
+file as well as the pools of which you want to access the lease
+counts.
 
-[1mINSTALLATION[0m
-    After installing the [1mdhcpd-snmp[0m script and adapting the configuration
-    file, test if the configuration is valid:
+The file is in B<key: value> format and allows only two keys:
 
-      $ path/to/dhcpd-snmp --test path/to/dhcpd-snmp.conf
+=over 8
 
-    This will print per-pool stats.
+=item B<leases>: C</var/lib/dhcp3/dhcpd.leases>
 
-    If this works, it can be installed in Net-SNMP. To install it, the
-    following line needs to be inserted in the snmpd.conf file:
+Location of the F<dhcpd.leases> file. This file needs to be accessible
+by the script.
 
-      pass_persist .1.3.6.1.4.1.21695.1.2 path/to/dhcpd-snmp path/to/dhcpd-snmp.conf
+=item B<pool>: C<index>, C<description>, C<ip1-ip2, ip3-ip4...>
 
-    Net-SNMP will need to be restarted after this change.
+Defines a pool to monitor. C<index> is a unique numeric index,
+C<description> a textual description of this pool, and C<ip1-ip2,
+ip3-ip4, ...> defines the ranges of IP addresses belonging to this
+pool.
 
-    You should now be able to get the statistics using snmpwalk, for example:
+=back
 
-      $ snmpwalk host community .1.3.6.1.4.1.21695.1.2
+Since this extension is a persistent script, changes to the
+configuration file require a restart of snmpd.
 
-    This should give you a list of the statistics of your DHCP server.
+=head1 INSTALLATION
 
-    = head2 RUNNING THE SCRIPT INTERACTIVELY
+After installing the B<dhcpd-snmp> script and adapting the
+configuration file, test if the configuration is valid:
 
-    [1mdhcpd-snmp[0m is a simple script which is run by Net-SNMP and which is
-    controlled using stdin/stdout. If you run it interactively, you can
-    control it as follows:
+  $ path/to/dhcpd-snmp --test path/to/dhcpd-snmp.conf
 
-      PING
+This will print per-pool stats.
 
-    The script should return "PONG".
+If this works, it can be installed in Net-SNMP. To install it, the
+following line needs to be inserted in the F<snmpd.conf> file:
 
-      get
-      .1.3.6.1.4.1.21695.1.2.1
+  pass_persist .1.3.6.1.4.1.21695.1.2 path/to/dhcpd-snmp path/to/dhcpd-snmp.conf
 
-    The script should return three lines: the OID, "integer", and the number
-    of configured pools.
+Net-SNMP will need to be restarted after this change.
 
-      get
-      .1.3.6.1.4.1.21695.1.2.2.2.1
+You should now be able to get the statistics using F<snmpwalk>, for example:
 
-    OID, "string", and the name of your first address pool.
+  $ snmpwalk host community .1.3.6.1.4.1.21695.1.2
 
-      get
-      .1.3.6.1.4.1.21695.1.2.2.4.1
+This should give you a list of the statistics of your DHCP server.
 
-    OID, "integer", and the number of active leases.
+= head2 RUNNING THE SCRIPT INTERACTIVELY
 
-    Quit the dialog using CTRL-D.
+B<dhcpd-snmp> is a simple script which is run by Net-SNMP and which is
+controlled using stdin/stdout. If you run it interactively, you can
+control it as follows:
 
-[1mMIB[0m
-    The script returns the following variables:
+  PING
 
-      .1.3.6.1.4.1.21695.1.2.1: number of configured pools
-      .1.3.6.1.4.1.21695.1.2.2.<pool>: pool description
-      .1.3.6.1.4.1.21695.1.2.3.<pool>: size of the pool (number of addresses)
-      .1.3.6.1.4.1.21695.1.2.4.<pool>: active leases
-      .1.3.6.1.4.1.21695.1.2.5.<pool>: expired leases
-      .1.3.6.1.4.1.21695.1.2.6.<pool>: available addresses (size - active leases)
+The script should return "PONG".
 
-    For a complete MIB file see the "mibs" directory in the source archive.
+  get
+  .1.3.6.1.4.1.21695.1.2.1
 
-[1mSECURITY[0m
-    It is assumed that users of this script know how to properly secure their
-    snmpd. Please read the corresponding man pages on more information about
-    this.
+The script should return three lines: the OID, "integer", and the
+number of configured pools.
 
-[1mCOPYRIGHT AND LICENSE[0m
-    Copyright (C) 2006-2015 Oliver Hitz
+  get
+  .1.3.6.1.4.1.21695.1.2.2.2.1
 
-    This program is free software; you can redistribute it and/or modify it
-    under the terms of the GNU General Public License as published by the Free
-    Software Foundation; either version 2 of the License, or (at your option)
-    any later version.
+OID, "string", and the name of your first address pool.
 
-    This program is distributed in the hope that it will be useful, but
-    WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY
-    or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License
-    for more details.
+  get
+  .1.3.6.1.4.1.21695.1.2.2.4.1
 
-    You should have received a copy of the GNU General Public License along
-    with this program; if not, write to the Free Software Foundation, Inc., 59
-    Temple Place - Suite 330, Boston, MA 02111-1307, USA.
+OID, "integer", and the number of active leases.
+
+Quit the dialog using CTRL-D.
+
+=head1 MIB
+
+The script returns the following variables:
+
+  .1.3.6.1.4.1.21695.1.2.1: number of configured pools
+  .1.3.6.1.4.1.21695.1.2.2.<pool>: pool description
+  .1.3.6.1.4.1.21695.1.2.3.<pool>: size of the pool (number of addresses)
+  .1.3.6.1.4.1.21695.1.2.4.<pool>: active leases
+  .1.3.6.1.4.1.21695.1.2.5.<pool>: expired leases
+  .1.3.6.1.4.1.21695.1.2.6.<pool>: available addresses (size - active leases)
+
+For a complete MIB file see the C<mibs> directory in the source archive.
+
+=head1 SECURITY
+
+It is assumed that users of this script know how to properly secure
+their snmpd. Please read the corresponding man pages on more
+information about this.
+
+=head1 COPYRIGHT AND LICENSE
+
+Copyright (C) 2006-2015 Oliver Hitz
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or (at
+your option) any later version.
+
+This program is distributed in the hope that it will be useful, but
+WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307,
+USA.
 
