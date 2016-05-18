@@ -1,0 +1,52 @@
+<dhcp_leases>
+	<name>Get DHCP Lease Stats</name>
+	<description>Queries an ISC DHCP server for current lease stats (using https://github.com/ohitz/dhcpd-snmp)</description>
+	<oid_index>.1.3.6.1.4.1.21695.1.2.1</oid_index>
+	<index_order_type>numeric</index_order_type>
+	<index_title_format>|chosen_order_field|</index_title_format>
+
+	<fields>
+		<subnetIndex>
+			<name>Index</name>
+			<method>walk</method>
+			<source>value</source>
+			<direction>input</direction>
+			<oid>.1.3.6.1.4.1.21695.1.2.2.1</oid>
+		</subnetIndex>
+		<subnetDesc>
+			<name>Description</name>
+			<method>walk</method>
+			<source>value</source>
+			<direction>input</direction>
+			<oid>.1.3.6.1.4.1.21695.1.2.2.2</oid>
+		</subnetDesc>
+		<subnetTotal>
+			<name>Total Size</name>
+			<method>walk</method>
+			<source>value</source>
+			<direction>output</direction>
+			<oid>.1.3.6.1.4.1.21695.1.2.2.3</oid>
+		</subnetTotal>
+		<subnetActive>
+			<name>Active Leases</name>
+			<method>walk</method>
+			<source>value</source>
+			<direction>output</direction>
+			<oid>.1.3.6.1.4.1.21695.1.2.2.4</oid>
+		</subnetActive>
+		<subnetExpired>
+			<name>Expired Leases</name>
+			<method>walk</method>
+			<source>value</source>
+			<direction>output</direction>
+			<oid>.1.3.6.1.4.1.21695.1.2.2.5</oid>
+		</subnetExpired>
+		<subnetAvailable>
+			<name>Available Leases</name>
+			<method>walk</method>
+			<source>value</source>
+			<direction>output</direction>
+			<oid>.1.3.6.1.4.1.21695.1.2.2.6</oid>
+		</subnetAvailable>
+	</fields>
+</dhcp_leases>
