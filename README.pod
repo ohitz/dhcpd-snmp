@@ -61,7 +61,7 @@ You should now be able to get the statistics using F<snmpwalk>, for example:
 
 This should give you a list of the statistics of your DHCP server.
 
-= head2 RUNNING THE SCRIPT INTERACTIVELY
+=head2 RUNNING THE SCRIPT INTERACTIVELY
 
 B<dhcpd-snmp> is a simple script which is run by Net-SNMP and which is
 controlled using stdin/stdout. If you run it interactively, you can
