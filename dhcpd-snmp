@@ -225,16 +225,16 @@ sub create_dhcp_mib
 
     my $pool = $conf->{pools}->{$i};
     
-    $MIB{"2.1.".$i} = [ "integer", $i, 0 ];
-    $MIB{"2.2.".$i} = [ "string", $pool->{name}, 0 ];
-    $MIB{"2.3.".$i} = [ "integer", $pool->{total}, 0 ];
-    $MIB{"2.4.".$i} = [ "integer", 0, 0 ];
-    $MIB{"2.5.".$i} = [ "integer", 0, 0 ];
-    $MIB{"2.6.".$i} = [ "integer", 0, 0 ];
+    $MIB{"2.1.1.".$i} = [ "integer", $i, 0 ];
+    $MIB{"2.1.2.".$i} = [ "string", $pool->{name}, 0 ];
+    $MIB{"2.1.3.".$i} = [ "integer", $pool->{total}, 0 ];
+    $MIB{"2.1.4.".$i} = [ "integer", 0, 0 ];
+    $MIB{"2.1.5.".$i} = [ "integer", 0, 0 ];
+    $MIB{"2.1.6.".$i} = [ "integer", 0, 0 ];
 
-    $MIB_VALUES{"2.4.$i"} = 0;
-    $MIB_VALUES{"2.5.$i"} = 0;
-    $MIB_VALUES{"2.6.$i"} = 0;
+    $MIB_VALUES{"2.1.4.$i"} = 0;
+    $MIB_VALUES{"2.1.5.$i"} = 0;
+    $MIB_VALUES{"2.1.6.$i"} = 0;
   }
 
   @MIB_INDEX = sort { oidcmp($a, $b) } keys %MIB;
@@ -441,9 +441,9 @@ sub worker_thread
     foreach my $i (keys %{ $conf->{pools} }) {
       my $pool = $conf->{pools}->{$i};
       
-      $MIB_VALUES{"2.4.$i"} = $pool->{active};
-      $MIB_VALUES{"2.5.$i"} = $pool->{expired};
-      $MIB_VALUES{"2.6.$i"} = $pool->{total} - $pool->{active};
+      $MIB_VALUES{"2.1.4.$i"} = $pool->{active};
+      $MIB_VALUES{"2.1.5.$i"} = $pool->{expired};
+      $MIB_VALUES{"2.1.6.$i"} = $pool->{total} - $pool->{active};
     }
    
     sleep($cache_secs);
@@ -532,12 +532,12 @@ The script should return three lines: the OID, "integer", and the
 number of configured pools.
 
   get
-  .1.3.6.1.4.1.21695.1.2.2.2.1
+  .1.3.6.1.4.1.21695.1.2.2.1.2.1
 
 OID, "string", and the name of your first address pool.
 
   get
-  .1.3.6.1.4.1.21695.1.2.2.4.1
+  .1.3.6.1.4.1.21695.1.2.2.1.4.1
 
 OID, "integer", and the number of active leases.
 
@@ -548,11 +548,11 @@ Quit the dialog using CTRL-D.
 The script returns the following variables:
 
   .1.3.6.1.4.1.21695.1.2.1: number of configured pools
-  .1.3.6.1.4.1.21695.1.2.2.<pool>: pool description
-  .1.3.6.1.4.1.21695.1.2.3.<pool>: size of the pool (number of addresses)
-  .1.3.6.1.4.1.21695.1.2.4.<pool>: active leases
-  .1.3.6.1.4.1.21695.1.2.5.<pool>: expired leases
-  .1.3.6.1.4.1.21695.1.2.6.<pool>: available addresses (size - active leases)
+  .1.3.6.1.4.1.21695.1.2.2.1.2.<pool>: pool description
+  .1.3.6.1.4.1.21695.1.2.2.1.3.<pool>: size of the pool (number of addresses)
+  .1.3.6.1.4.1.21695.1.2.2.1.4.<pool>: active leases
+  .1.3.6.1.4.1.21695.1.2.2.1.5.<pool>: expired leases
+  .1.3.6.1.4.1.21695.1.2.2.1.6.<pool>: available addresses (size - active leases)
 
 For a complete MIB file see the C<mibs> directory in the source archive.
 

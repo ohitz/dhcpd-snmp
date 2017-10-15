@@ -55,6 +55,15 @@ dhcpdSnmpPoolTable OBJECT-TYPE
 		 address pool."
 	::= { dhcpdSnmp 2 }
 
+dhcpdSnmpPoolEntry OBJECT-TYPE
+    SYNTAX      DhcpdSnmpPoolEntry
+    MAX-ACCESS  not-accessible
+    STATUS      current
+    DESCRIPTION
+	"A row describing a given dhcp pool"
+    INDEX   { dhcpdSnmpPoolIndex }
+    ::= {dhcpdSnmpPoolTable 1 }
+
 DhcpdSnmpPoolEntry ::= SEQUENCE {
 dhcpdSnmpPoolIndex		Integer32,
 dhcpdSnmpPoolDescription	DisplayString,
@@ -70,7 +79,7 @@ dhcpdSnmpPoolIndex OBJECT-TYPE
 	STATUS		current
 	DESCRIPTION
 		"The index for each address pool."
-	::= { dhcpdSnmpPoolTable 1 }
+	::= { dhcpdSnmpPoolEntry 1 }
 
 dhcpdSnmpPoolDescription OBJECT-TYPE
 	SYNTAX		DisplayString
@@ -78,7 +87,7 @@ dhcpdSnmpPoolDescription OBJECT-TYPE
 	STATUS		current
 	DESCRIPTION
 		"Holds a textual description of the current pool."
-	::= { dhcpdSnmpPoolTable 2 }
+	::= { dhcpdSnmpPoolEntry 2 }
 
 dhcpdSnmpPoolSize OBJECT-TYPE
 	SYNTAX		Integer32
@@ -86,7 +95,7 @@ dhcpdSnmpPoolSize OBJECT-TYPE
 	STATUS		current
 	DESCRIPTION
 		"Number of addresses in the pool."
-	::= { dhcpdSnmpPoolTable 3 }
+	::= { dhcpdSnmpPoolEntry 3 }
 
 dhcpdSnmpPoolActiveLeases OBJECT-TYPE
 	SYNTAX		Integer32
@@ -94,7 +103,7 @@ dhcpdSnmpPoolActiveLeases OBJECT-TYPE
 	STATUS		current
 	DESCRIPTION
 		"Active leases."
-	::= { dhcpdSnmpPoolTable 4 }
+	::= { dhcpdSnmpPoolEntry 4 }
 
 dhcpdSnmpPoolExpiredLeases OBJECT-TYPE
 	SYNTAX		Integer32
@@ -102,7 +111,7 @@ dhcpdSnmpPoolExpiredLeases OBJECT-TYPE
 	STATUS		current
 	DESCRIPTION
 		"Expired leases."
-	::= { dhcpdSnmpPoolTable 5 }
+	::= { dhcpdSnmpPoolEntry 5 }
 
 dhcpdSnmpPoolAvailableAddresses OBJECT-TYPE
 	SYNTAX		Integer32
@@ -110,6 +119,6 @@ dhcpdSnmpPoolAvailableAddresses OBJECT-TYPE
 	STATUS		current
 	DESCRIPTION
 		"Available addresses."
-	::= { dhcpdSnmpPoolTable 6 }
+	::= { dhcpdSnmpPoolEntry 6 }
 
 END
