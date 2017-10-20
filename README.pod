@@ -78,12 +78,12 @@ The script should return three lines: the OID, "integer", and the
 number of configured pools.
 
   get
-  .1.3.6.1.4.1.21695.1.2.2.2.1
+  .1.3.6.1.4.1.21695.1.2.2.1.2.1
 
 OID, "string", and the name of your first address pool.
 
   get
-  .1.3.6.1.4.1.21695.1.2.2.4.1
+  .1.3.6.1.4.1.21695.1.2.2.1.4.1
 
 OID, "integer", and the number of active leases.
 
@@ -94,11 +94,11 @@ Quit the dialog using CTRL-D.
 The script returns the following variables:
 
   .1.3.6.1.4.1.21695.1.2.1: number of configured pools
-  .1.3.6.1.4.1.21695.1.2.2.<pool>: pool description
-  .1.3.6.1.4.1.21695.1.2.3.<pool>: size of the pool (number of addresses)
-  .1.3.6.1.4.1.21695.1.2.4.<pool>: active leases
-  .1.3.6.1.4.1.21695.1.2.5.<pool>: expired leases
-  .1.3.6.1.4.1.21695.1.2.6.<pool>: available addresses (size - active leases)
+  .1.3.6.1.4.1.21695.1.2.2.1.<pool>: pool description
+  .1.3.6.1.4.1.21695.1.2.3.1.<pool>: size of the pool (number of addresses)
+  .1.3.6.1.4.1.21695.1.2.4.1.<pool>: active leases
+  .1.3.6.1.4.1.21695.1.2.5.1.<pool>: expired leases
+  .1.3.6.1.4.1.21695.1.2.6.1.<pool>: available addresses (size - active leases)
 
 For a complete MIB file see the C<mibs> directory in the source archive.
 
